@@ -179,15 +179,18 @@ timer_print_stats (void)
 }
 
 
-void update_blocked_ticks(struct thread *t, void *aux){ //for thread_foreach function
+void update_blocked_ticks(struct thread *t, void *aux) //for thread_foreach function
+{ 
   if (t->status == THREAD_BLOCKED){ //if the thread is blocked,
-  t->ticks_blocked -= 1; //update number of blocked ticks by taking -1 (this is because)
-  if (t->ticks_blocked <= 0){ //if the number of ticks blocked in this thread is <= 0, 
-    thread_unblock(t); //unblock thread as its sleep time has now passed
-    t->ticks_blocked = 0; //safety update so the ticks_blocked is never < 0 (this should not happen, but just in case)
-  }}
+    t->ticks_blocked -= 1; //update number of blocked ticks by taking -1 (this is because)
+    if (t->ticks_blocked <= 0){ //if the number of ticks blocked in this thread is <= 0, 
+      thread_unblock(t); //unblock thread as its sleep time has now passed
+      t->ticks_blocked = 0; //safety update so the ticks_blocked is never < 0 (this should not happen, but just in case)
+    }
+  }
 
 }
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
