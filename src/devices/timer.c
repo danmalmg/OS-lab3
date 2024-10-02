@@ -99,7 +99,7 @@ timer_sleep (int64_t ticks)
   
   ASSERT (intr_get_level () == INTR_ON); //check that interrupts is turned on
 
-  enum intr_level old_level = intr_disable(); //temporarily turn off interrupts in order to update thread object
+  enum intr_level old_level = intr_disable(); //temporarily turn off interrupts in order to update the thread's ticks_blocked value
   ASSERT (intr_get_level () == INTR_OFF); //check that interrupts is turned off
   t->ticks_blocked = ticks; //update number of ticks this thread is blocked
   thread_block(); //block the thread
