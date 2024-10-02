@@ -91,18 +91,20 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  if (ticks <= 0){
+  if (ticks <= 0){ //safety check, no need to do anything if sleep time is 0
     return;
   }
 
-  struct thread *t = thread_current ();
+  struct thread *t = thread_current (); //gets the current thread
   
-  ASSERT (intr_get_level () == INTR_ON);
+  ASSERT (intr_get_level () == INTR_ON); //check that interrupts is turned on
 
-  enum intr_level old_level = intr_disable();
-  t->ticks_blocked = ticks;
-  thread_block();
-  intr_set_level(old_level);
+  enum intr_level old_level = intr_disable(); //temporarily turn off interrupts in order to update thread object
+  ASSERT (intr_get_level () == INTR_OFF); //check that interrupts is turned off
+  t->ticks_blocked = ticks; //update number of ticks this thread is blocked
+  thread_block(); //block the thread
+  intr_set_level(old_level); //turn interrupts back on
+  ASSERT (intr_get_level () == INTR_ON); //check that interrupts is turned on
 
 }
 
@@ -177,12 +179,12 @@ timer_print_stats (void)
 }
 
 
-void update_blocked_ticks(struct thread *t, void *aux){
-  if (t->status == THREAD_BLOCKED){
-  t->ticks_blocked -= 1;
-  if (t->ticks_blocked <= 0){
-    thread_unblock(t);
-    t->ticks_blocked = 0;
+void update_blocked_ticks(struct thread *t, void *aux){ //for thread_foreach function
+  if (t->status == THREAD_BLOCKED){ //if the thread is blocked,
+  t->ticks_blocked -= 1; //update number of blocked ticks by taking -1 (this is because)
+  if (t->ticks_blocked <= 0){ //if the number of ticks blocked in this thread is <= 0, 
+    thread_unblock(t); //unblock thread as its sleep time has now passed
+    t->ticks_blocked = 0; //safety update so the ticks_blocked is never < 0 (this should not happen, but just in case)
   }}
 
 }
@@ -191,8 +193,8 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  thread_tick ();
-  thread_foreach(update_blocked_ticks, NULL);
+  thread_tick (); //called at each timer tick
+  thread_foreach(update_blocked_ticks, NULL); //thread_foreach takes a function which it will apply to each thread in the struct
   
 }
 
