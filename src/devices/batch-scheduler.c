@@ -76,12 +76,41 @@ static void transfer_data (const task_t *task);
 /* Releases the slot */
 static void release_slot (const task_t *task);
 
+static struct condition slot_cond_send;
+static struct condition slot_cond_receive;
+static struct lock bus_lock;
+static int slots;
+//static priority_t current_priority;
+static direction_t current_direction;
+static int waiters_priority[2];
+static int waiters_direction[2];
+
 void init_bus (void) {
 
   random_init ((unsigned int)123456789);
 
   /* TODO: Initialize global/static variables,
      e.g. your condition variables, locks, counters etc */
+
+  cond_init(&slot_cond_send);
+
+  cond_init(&slot_cond_receive);
+
+  lock_init(&bus_lock);
+
+  slots = 0;
+
+  //current_priority = NORMAL;
+
+  current_direction = SEND;
+
+  waiters_priority[NORMAL] = 0;
+
+  waiters_priority[PRIORITY] = 0;
+
+  waiters_direction[NORMAL] = 0;
+
+  waiters_direction[PRIORITY] = 0;
 }
 
 void batch_scheduler (unsigned int num_priority_send,
@@ -188,6 +217,22 @@ void get_slot (const task_t *task) {
    * feel free to schedule priority tasks of the same direction,
    * even if there are priority tasks of the other direction waiting
    */
+  lock_acquire(&bus_lock);
+  while ((slots == BUS_CAPACITY) || (slots > 0 && current_direction != task->direction || task->priority == NORMAL && waiters_priority[PRIORITY] > 0)) {
+    waiters_direction[task->direction]++;
+    waiters_priority[task->priority]++;
+    if (task->direction == SEND) {
+      cond_wait(&slot_cond_send, &bus_lock);
+    }
+    else {
+      cond_wait(&slot_cond_receive, &bus_lock);
+    }
+    waiters_direction[task->direction]--;
+    waiters_priority[task->priority]--;
+  }
+  slots++;
+  current_direction = task->direction;
+  lock_release(&bus_lock);
 }
 
 void transfer_data (const task_t *task) {
@@ -201,4 +246,22 @@ void release_slot (const task_t *task) {
    *       - Do you need to notify any waiting task?
    *       - Do you need to increment/decrement any counter?
    */
+  lock_acquire(&bus_lock);
+  slots--;
+
+  if (waiters_direction[current_direction] > 0) 
+    if (task->direction == SEND) {
+      cond_signal(&slot_cond_send, &bus_lock);
+    }
+    else {
+      cond_signal(&slot_cond_receive, &bus_lock);
+    }
+  else if (slots == 0) 
+    if (task->direction == SEND)
+      cond_broadcast(&slot_cond_receive, &bus_lock);
+    else {
+      cond_broadcast(&slot_cond_send, &bus_lock);
+    }
+    //cond_broadcast(&waiters_direction[1-current_direction], &bus_lock);
+  lock_release(&bus_lock);
 }
