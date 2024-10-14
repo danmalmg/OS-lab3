@@ -76,14 +76,12 @@ static void transfer_data (const task_t *task);
 /* Releases the slot */
 static void release_slot (const task_t *task);
 
-static struct condition slot_cond_send;
-static struct condition slot_cond_receive;
 static struct lock bus_lock;
 static int slots;
-//static priority_t current_priority;
 static direction_t current_direction;
 static int waiters_priority[2];
 static int waiters_direction[2];
+struct condition slot_cond[2];
 
 void init_bus (void) {
 
@@ -92,15 +90,13 @@ void init_bus (void) {
   /* TODO: Initialize global/static variables,
      e.g. your condition variables, locks, counters etc */
 
-  cond_init(&slot_cond_send);
+  cond_init(&slot_cond[0]);
 
-  cond_init(&slot_cond_receive);
+  cond_init(&slot_cond[1]);
 
   lock_init(&bus_lock);
 
   slots = 0;
-
-  //current_priority = NORMAL;
 
   current_direction = SEND;
 
@@ -222,10 +218,10 @@ void get_slot (const task_t *task) {
     waiters_direction[task->direction]++;
     waiters_priority[task->priority]++;
     if (task->direction == SEND) {
-      cond_wait(&slot_cond_send, &bus_lock);
+      cond_wait(&slot_cond[0], &bus_lock); //send
     }
     else {
-      cond_wait(&slot_cond_receive, &bus_lock);
+      cond_wait(&slot_cond[1], &bus_lock); //receive
     }
     waiters_direction[task->direction]--;
     waiters_priority[task->priority]--;
@@ -251,17 +247,14 @@ void release_slot (const task_t *task) {
 
   if (waiters_direction[current_direction] > 0) 
     if (task->direction == SEND) {
-      cond_signal(&slot_cond_send, &bus_lock);
+      cond_signal(&slot_cond[0], &bus_lock); //send
     }
     else {
-      cond_signal(&slot_cond_receive, &bus_lock);
+      cond_signal(&slot_cond[1], &bus_lock); //receive
     }
-  else if (slots == 0) 
-    if (task->direction == SEND)
-      cond_broadcast(&slot_cond_receive, &bus_lock);
-    else {
-      cond_broadcast(&slot_cond_send, &bus_lock);
-    }
-    //cond_broadcast(&waiters_direction[1-current_direction], &bus_lock);
+  else if (slots == 0) {
+    direction_t opposite_direction = other_direction(task->direction);
+    cond_broadcast(&slot_cond[opposite_direction], &bus_lock);
+  }
   lock_release(&bus_lock);
 }
