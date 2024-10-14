@@ -181,7 +181,7 @@ timer_print_stats (void)
 
 void update_blocked_ticks(struct thread *t, void *aux) //for thread_foreach function
 { 
-  if (t->status == THREAD_BLOCKED){ //if the thread is blocked,
+  if (t->status == THREAD_BLOCKED && t->ticks_blocked > 0){ //if the thread is blocked,
     t->ticks_blocked -= 1; //update the number of blocked ticks left by decrementing ticks_blocked value
     if (t->ticks_blocked <= 0){ //if the number of ticks blocked in this thread is <= 0, 
       thread_unblock(t); //unblock thread as its sleep time has now passed
