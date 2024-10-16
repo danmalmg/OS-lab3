@@ -87,25 +87,20 @@ void init_bus (void) {
 
   random_init ((unsigned int)123456789);
 
-  /* TODO: Initialize global/static variables,
-     e.g. your condition variables, locks, counters etc */
+  cond_init(&slot_cond[0]);    //init condition variable for sending
 
-  cond_init(&slot_cond[0]);
+  cond_init(&slot_cond[1]);    //init condition variable for receiving
 
-  cond_init(&slot_cond[1]);
+  lock_init(&bus_lock);    //init bus lock
 
-  lock_init(&bus_lock);
+  slots = 0;    //slots on bus
 
-  slots = 0;
+  current_direction = SEND;    //init stating direction to SEND
 
-  current_direction = SEND;
-
+  /*set waiting queues to empty*/
   waiters_priority[NORMAL] = 0;
-
   waiters_priority[PRIORITY] = 0;
-
   waiters_direction[NORMAL] = 0;
-
   waiters_direction[PRIORITY] = 0;
 }
 
@@ -202,33 +197,30 @@ static direction_t other_direction(direction_t this_direction) {
 
 void get_slot (const task_t *task) {
 
-  /* TODO: Try to get a slot, respect the following rules:
-   *        1. There can be only BUS_CAPACITY tasks using the bus
-   *        2. The bus is half-duplex: All tasks using the bus should be either
-   * sending or receiving
-   *        3. A normal task should not get the bus if there are priority tasks
-   * waiting
-   *
-   * You do not need to guarantee fairness or freedom from starvation:
-   * feel free to schedule priority tasks of the same direction,
-   * even if there are priority tasks of the other direction waiting
-   */
-  lock_acquire(&bus_lock);
-  while ((slots == BUS_CAPACITY) || (slots > 0 && current_direction != task->direction || task->priority == NORMAL && waiters_priority[PRIORITY] > 0)) {
+  lock_acquire(&bus_lock);   
+  /*if tasks can't get on bus, wait*/
+  while ((slots == BUS_CAPACITY) ||    //if all slots are taken
+   (slots > 0 && current_direction != task->direction ||    //if task is the wrong direction
+    task->priority == NORMAL && waiters_priority[PRIORITY] > 0)) {    //if task is normal and priority tasks are waiting
     waiters_direction[task->direction]++;
     waiters_priority[task->priority]++;
+    /*send task is waiting in queue*/
     if (task->direction == SEND) {
-      cond_wait(&slot_cond[0], &bus_lock); //send
+      cond_wait(&slot_cond[0], &bus_lock); 
     }
+    /*receive task is waiting*/
     else {
-      cond_wait(&slot_cond[1], &bus_lock); //receive
+      cond_wait(&slot_cond[1], &bus_lock);
     }
+    /*remove task from queue once signaled*/
     waiters_direction[task->direction]--;
     waiters_priority[task->priority]--;
   }
-  slots++;
-  current_direction = task->direction;
-  lock_release(&bus_lock);
+  /*slot taken by task*/
+  slots++;    
+  current_direction = task->direction;    
+
+  lock_release(&bus_lock);    
 }
 
 void transfer_data (const task_t *task) {
@@ -238,23 +230,21 @@ void transfer_data (const task_t *task) {
 
 void release_slot (const task_t *task) {
 
-  /* TODO: Release the slot, think about the actions you need to perform:
-   *       - Do you need to notify any waiting task?
-   *       - Do you need to increment/decrement any counter?
-   */
   lock_acquire(&bus_lock);
-  slots--;
-
-  if (waiters_direction[current_direction] > 0) 
-    if (task->direction == SEND) {
-      cond_signal(&slot_cond[0], &bus_lock); //send
-    }
-    else {
-      cond_signal(&slot_cond[1], &bus_lock); //receive
-    }
-  else if (slots == 0) {
-    direction_t opposite_direction = other_direction(task->direction);
+  
+  /*free a slot*/
+  slots--;    
+  /*if all slots are free, wake up all tasks in the opposite direction*/
+  if (slots == 0) {    
+    direction_t opposite_direction = other_direction(task->direction);    
     cond_broadcast(&slot_cond[opposite_direction], &bus_lock);
+    /*if there are priority tasks in the queue, signal one of them*/
+  } else if (waiters_priority[PRIORITY] > 0) {    
+    cond_signal(&slot_cond[current_direction], &bus_lock);    
+    /*if there are no priority tasks, signal one normal task*/
+  } else if (waiters_direction[current_direction] > 0) {   
+    cond_signal(&slot_cond[current_direction], &bus_lock);    
   }
-  lock_release(&bus_lock);
+
+  lock_release(&bus_lock);   
 }
